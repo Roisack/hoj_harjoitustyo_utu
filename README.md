@@ -1,0 +1,1 @@
+This is a group assignment for a "distributed systems" class at University of Turku. Copying this code for homework purposes is not encouraged.
