@@ -180,7 +180,7 @@ public class ListenerService extends Thread {
             System.out.println("Constructing " + ports_wanted_by_remote + " SummingServices");
             ArrayList<SummingService> summingServices = new ArrayList<SummingService>();
             for (int i = 0; i < ports_wanted_by_remote; i++) {
-                summingServices.add(new SummingService(service_start_port + i));
+                summingServices.add(ServiceManager.create_summing_service(service_start_port + i));
             }
             
             System.out.println("Starting SummingServices");
@@ -213,8 +213,12 @@ public class ListenerService extends Thread {
         
         while (!interrupted) {
             try {
-                // Read further instructions from the remote (assignment 6)
-                remote_query = oIn.readInt();
+                try {
+                    sleep(500); // Sleep 0.5 seconds
+                } catch (InterruptedException ex) {
+                    Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
+                }
+               remote_query = oIn.readInt();
             } catch (InterruptedIOException e) {
                 continue;
             } catch (IOException ex) {
