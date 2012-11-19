@@ -47,7 +47,9 @@ public class ListenerService extends Thread {
     /* Address of the work distibutor */
     private InetAddress remote_address;
     /* Message that is sent to remote to offer our services */
-    private String service_banner = "palvelua tarjotaan portissa ";
+    // Eh? The assignment is wrong here. WorkDistributor.java expects only a number, not text
+    //private String service_banner = "palvelua tarjotaan portissa ";
+    private String service_banner = "";
     
     /* How many ports the remote wants to use */
     private int ports_wanted_by_remote;
