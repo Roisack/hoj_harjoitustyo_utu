@@ -169,18 +169,21 @@ public class ListenerService extends Thread {
         if (ports_wanted_by_remote < 0 || ports_wanted_by_remote > max_ports_for_remote) {
             // The remote wants a bad number of ports, signal -1 back
             try {
-              oOut.writeInt(-1);
+                System.out.println("Remote wants a bad number of ports: " + ports_wanted_by_remote);
+                oOut.writeInt(-1);
             } catch (IOException ex) {
                 Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
             }
             interrupted = true;
         } else {
             // Construct adder services
+            System.out.println("Constructing " + ports_wanted_by_remote + " SummingServices");
             ArrayList<SummingService> summingServices = new ArrayList<SummingService>();
             for (int i = 0; i < ports_wanted_by_remote; i++) {
                 summingServices.add(new SummingService(service_start_port + i));
             }
             
+            System.out.println("Starting SummingServices");
             // Once created, start them
             for (SummingService s : summingServices) {
                 s.start();
@@ -189,6 +192,7 @@ public class ListenerService extends Thread {
             // Then tell the remote about the ports which have been reserved and readied
             // TODO: Can we expect that all ports were assigned as wanted? Maybe the summing services
             // should tell something about their assigned ports, and if they are indeed ready for work
+            System.out.println("Sending assigned port numbers back to remote");
             for (int i = service_start_port; i < service_start_port + ports_wanted_by_remote; i++) {
                 try {
                     oOut.writeInt(i);
@@ -204,6 +208,8 @@ public class ListenerService extends Thread {
         // This object continues to run and waits for further instructions from remote
         
         int remote_query = 0;
+        
+        System.out.println("Now waiting for further instructions from remote");
         
         while (!interrupted) {
             try {
