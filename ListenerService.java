@@ -14,6 +14,7 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -48,6 +49,14 @@ public class ListenerService extends Thread {
     /* Message that is sent to remote to offer our services */
     private String service_banner = "palvelua tarjotaan portissa ";
     
+    /* How many ports the remote wants to use */
+    private int ports_wanted_by_remote;
+    
+    /* Limit the number of ports */
+    private int max_ports_for_remote = 15;
+    /* Starting port for summing services */
+    private int service_start_port = 3500;
+    
     /**
      * Constructs a new ServiceListener
      * @param p = port which is listened
@@ -61,6 +70,7 @@ public class ListenerService extends Thread {
         remote_port = r;
         buffer = new byte[256];
         interrupted = false;
+        ports_wanted_by_remote = 0;
         
         // By default use localhost
         listen_address = InetAddress.getLocalHost();
@@ -70,7 +80,7 @@ public class ListenerService extends Thread {
         server_socket = new ServerSocket(listen_port);
         server_socket.setSoTimeout(timeout);
 
-        setDaemon(true);
+        //setDaemon(true);
     }
     
     /**
@@ -79,7 +89,6 @@ public class ListenerService extends Thread {
      * Stop if the manager tells us to stop
      * If 5 attempts to listen have failed, exit
      */ 
-    @Override
     public void run() {
         
         // First form a TCP connection to remote
@@ -87,30 +96,19 @@ public class ListenerService extends Thread {
         int connections_failed = 0;
         boolean connected = false;
         
-        InputStream iS = null;
-        OutputStream oS = null;
-        ObjectInputStream oIn = null;
-        ObjectOutputStream oOut = null;
-        
-        try {
-            iS = listen_socket.getInputStream();
-            oS = listen_socket.getOutputStream();
-            oIn = new ObjectInputStream(iS);
-            oOut = new ObjectOutputStream(oS);
-        } catch (IOException ex) {
-            Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
-        }
-        
         System.out.println("ListenerService attempting initial connection to " + remote_address + ":" + remote_port);
         
         while (connections_failed < max_attempts && !connected)
         {
             try {
                 contact_remote();
+                System.out.println("Waiting for connection");
                 listen_socket = server_socket.accept();
+                System.out.println("Connection opened");
                 connected = true;
             } catch (SocketTimeoutException ex) {
                 connections_failed++;
+                System.out.println("Connection timed out: " + connections_failed);
                 Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
                 continue;
             } catch (IOException ex) {
@@ -121,7 +119,7 @@ public class ListenerService extends Thread {
         if (!connected) {
             System.out.println("Connection failed 5 times, exiting");
             try {
-                listen_socket.close();
+                server_socket.close();
             } catch (IOException ex) {
                 Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
             }
@@ -130,15 +128,93 @@ public class ListenerService extends Thread {
         
         System.out.println("Connection formned to remote after " + (connections_failed+1) + " tries");
         
+        // Set up ObjectStreams for transmitting data
+        InputStream iS = null;
+        OutputStream oS = null;
+        ObjectInputStream oIn = null;
+        ObjectOutputStream oOut = null;
+        try {
+            listen_socket.setSoTimeout(timeout); // Is this required?
+        } catch (SocketException ex) {
+            Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        
+        try {
+            iS = listen_socket.getInputStream();
+            oS = listen_socket.getOutputStream();
+            oIn = new ObjectInputStream(iS);
+            oOut = new ObjectOutputStream(oS);
+        } catch (IOException ex) {
+            Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        try {
+            // Begin working with the remote
+            // First get the number of ports wanted
+            ports_wanted_by_remote = oIn.readInt();
+            
+        } catch (SocketTimeoutException ex) {
+            try {
+                // Remote didn't reply in time, send -1 back to tell him we quit
+                oOut.writeInt(-1);
+            } catch (IOException ex1) {
+                Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex1);
+            }
+        } catch (IOException ex) {
+            Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
+            interrupted = true;
+        }
+        
+        if (ports_wanted_by_remote < 0 || ports_wanted_by_remote > max_ports_for_remote) {
+            // The remote wants a bad number of ports, signal -1 back
+            try {
+              oOut.writeInt(-1);
+            } catch (IOException ex) {
+                Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
+            }
+            interrupted = true;
+        } else {
+            // Construct adder services
+            ArrayList<SummingService> summingServices = new ArrayList<SummingService>();
+            for (int i = 0; i < ports_wanted_by_remote; i++) {
+                summingServices.add(new SummingService(service_start_port + i));
+            }
+            
+            // Once created, start them
+            for (SummingService s : summingServices) {
+                s.start();
+            }
+            
+            // Then tell the remote about the ports which have been reserved and readied
+            // TODO: Can we expect that all ports were assigned as wanted? Maybe the summing services
+            // should tell something about their assigned ports, and if they are indeed ready for work
+            for (int i = service_start_port; i < service_start_port + ports_wanted_by_remote; i++) {
+                try {
+                    oOut.writeInt(i);
+                } catch (IOException ex) {
+                    Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
+                }
+            }
+        }
+        
+        // At this point the connection has been established and we have assigned n summing services
+        // The remote knows at which ports the summing services are working and is probably already
+        // working hard together with them
+        // This object continues to run and waits for further instructions from remote
+        
+        int remote_query = 0;
+        
         while (!interrupted) {
             try {
-                oIn.readInt();
+                // Read further instructions from the remote (assignment 6)
+                remote_query = oIn.readInt();
             } catch (InterruptedIOException e) {
                 continue;
             } catch (IOException ex) {
                 Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
+        
+        // Cleanup
         try {
             oIn.close();
             oOut.close();
@@ -155,8 +231,10 @@ public class ListenerService extends Thread {
      * @throws IOException
      */
     public int contact_remote() throws IOException {
+        System.out.println("Sending hello to remote");
         // Use UDP for the connection
         DatagramSocket banner_socket = new DatagramSocket();
+        banner_socket.setSoTimeout(timeout);
         String message_content = service_banner;
         
         DatagramPacket banner_packet = new DatagramPacket(message_content.getBytes(), message_content.length(), remote_address, remote_port);
