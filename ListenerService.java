@@ -9,6 +9,7 @@ import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -28,6 +29,8 @@ public class ListenerService extends Thread {
     private int timeout;
     /* Address for the listen socket */
     private InetAddress listen_address;
+    /* The socket which opens the connection */
+    private ServerSocket server_socket;
     /* The socket which handles the connection */
     private Socket listen_socket;
     /* Data buffer for the socket */
@@ -64,9 +67,9 @@ public class ListenerService extends Thread {
         remote_address = InetAddress.getLocalHost();
         service_banner = service_banner + listen_port;
         
-        listen_socket = new Socket(listen_address, listen_port);
-        
-        listen_socket.setSoTimeout(timeout);
+        server_socket = new ServerSocket(listen_port);
+        server_socket.setSoTimeout(timeout);
+
         setDaemon(true);
     }
     
@@ -78,8 +81,6 @@ public class ListenerService extends Thread {
      */ 
     @Override
     public void run() {
-        // Create a container for data that is received from the remote client
-        DatagramPacket received_data = new DatagramPacket(buffer, buffer.length);
         
         // First form a TCP connection to remote
         // If no connection is formed after 5 tries, exit
@@ -106,7 +107,7 @@ public class ListenerService extends Thread {
         {
             try {
                 contact_remote();
-                oIn.readInt();
+                listen_socket = server_socket.accept();
                 connected = true;
             } catch (SocketTimeoutException ex) {
                 connections_failed++;
@@ -154,6 +155,7 @@ public class ListenerService extends Thread {
      * @throws IOException
      */
     public int contact_remote() throws IOException {
+        // Use UDP for the connection
         DatagramSocket banner_socket = new DatagramSocket();
         String message_content = service_banner;
         
