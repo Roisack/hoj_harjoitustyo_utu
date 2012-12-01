@@ -40,6 +40,8 @@ public class ListenerService extends Thread {
     private boolean interrupted;
     /* How many times we will try waiting for timeout duration */
     private int max_attempts = 5;
+    /* Reference to a manager object */
+    private ServiceManager serviceManager;
     
 
     /* Port at which the work distributor is waiting for initial connections */
@@ -56,8 +58,6 @@ public class ListenerService extends Thread {
     
     /* Limit the number of ports */
     private int max_ports_for_remote = 15;
-    /* Starting port for summing services */
-    private int service_start_port = 3500;
     
     /**
      * Constructs a new ServiceListener
@@ -178,28 +178,24 @@ public class ListenerService extends Thread {
         } else {
             // Construct adder services
             System.out.println("Constructing " + ports_wanted_by_remote + " SummingServices");
-            ArrayList<SummingService> summingServices = new ArrayList<SummingService>();
-            for (int i = 0; i < ports_wanted_by_remote; i++) {
-                summingServices.add(ServiceManager.create_summing_service(service_start_port + i));
-            }
+            serviceManager.create_summing_services(ports_wanted_by_remote);
             
             System.out.println("Starting SummingServices");
-            // Once created, start them
-            for (SummingService s : summingServices) {
-                s.start();
-            }
             
             // Then tell the remote about the ports which have been reserved and readied
-            // TODO: Can we expect that all ports were assigned as wanted? Maybe the summing services
-            // should tell something about their assigned ports, and if they are indeed ready for work
             System.out.println("Sending assigned port numbers back to remote");
-            for (int i = service_start_port; i < service_start_port + ports_wanted_by_remote; i++) {
+            
+            int[] port_array = serviceManager.getSumServiceManager().getPortArray();
+            int array_size = serviceManager.getSumServiceManager().getNumberOfServices();
+            for (int i = 0; i < array_size; i++) {
                 try {
-                    oOut.writeInt(i);
+                    oOut.writeInt(port_array[i]);
                 } catch (IOException ex) {
                     Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
                 }
             }
+            
+            
         }
         
         // At this point the connection has been established and we have assigned n summing services
@@ -219,12 +215,39 @@ public class ListenerService extends Thread {
                     Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
                 }
                remote_query = oIn.readInt();
+               if (remote_query == 0) {
+                   // Okay, we are done. Close things and exit
+                   interrupted = true;
+                   System.out.println("Remote wants to shut down");
+               } else if (remote_query == 1) {
+                   // Remote wants to know the current sum
+                   int sum = serviceManager.getSumServiceManager().getSum();
+                   oOut.writeInt(sum);
+                   System.out.println("I sent " + sum + " back to remote as a sum of all numbers computed");
+               } else if (remote_query == 2) {
+                   // Remote wants to know which sum service has the largest total sum
+                   int number_of_service = serviceManager.getSumServiceManager().getLargestSumService();
+                   oOut.writeInt(number_of_service);
+                   System.out.println("I sent " + number_of_service + " back to remote as the service who has the largest sum");
+               } else if (remote_query == 3) {
+                   // Remote wants to know how many numbers in total have been summed
+                   int total_summed = serviceManager.getSumServiceManager().getNumbersSummed();
+                   oOut.writeInt(total_summed);
+                   System.out.println("I sent " + total_summed + " as the number of integers we have summed in total");
+               } else {
+                   // Remote has a bad value in its request
+                   oOut.writeInt(-1);
+                   System.out.println("Remote had a bad request: " + remote_query);
+               }
             } catch (InterruptedIOException e) {
                 continue;
             } catch (IOException ex) {
                 Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
+        
+        // Close all summing services
+        serviceManager.getSumServiceManager().closeSumService();
         
         // Cleanup
         try {
@@ -257,5 +280,9 @@ public class ListenerService extends Thread {
     
     public void stop_listening() {
         interrupted = true;
+    }
+    
+    public void setServiceManager(ServiceManager sm) {
+        serviceManager = sm;
     }
 }
