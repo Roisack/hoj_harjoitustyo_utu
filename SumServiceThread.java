@@ -25,9 +25,13 @@ public class SumServiceThread extends Thread {
         catch(Exception e) {
             System.out.println("Error:" + e);
         }
+        
+        System.out.println("SumServiceThread at port " + port + " created");
     }
 
     public void run() {
+        
+        System.out.println("== SumServiceThread at port " + port + " running");
         
         try {
             sumSocket = sumServer.accept();	
@@ -35,7 +39,12 @@ public class SumServiceThread extends Thread {
             ObjectInputStream oIn = new ObjectInputStream(inS);
 
             while(!stopread) {
-                int i = oIn.readInt();
+                int i = 0;
+                try {
+                    i = oIn.readInt();
+                } catch (Exception e) {
+                    System.out.println(e);
+                }
                 if(i == 0) {
                     stopread = true;
                 }
@@ -52,6 +61,8 @@ public class SumServiceThread extends Thread {
         } catch(Exception e) {
             System.out.println("Error:" + e);
         }
+        
+        System.out.println("SumServiceThread at port " + port + " closed");
     }
     
     public int getPort() {

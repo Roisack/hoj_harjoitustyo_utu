@@ -158,6 +158,7 @@ public class ListenerService extends Thread {
             try {
                 // Remote didn't reply in time, send -1 back to tell him we quit
                 oOut.writeInt(-1);
+                oOut.flush();
             } catch (IOException ex1) {
                 Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex1);
             }
@@ -189,7 +190,9 @@ public class ListenerService extends Thread {
             int array_size = serviceManager.getSumServiceManager().getNumberOfServices();
             for (int i = 0; i < array_size; i++) {
                 try {
+                    System.out.println("Writing " + port_array[i] + " to remote");
                     oOut.writeInt(port_array[i]);
+                    oOut.flush();
                 } catch (IOException ex) {
                     Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
                 }
@@ -203,18 +206,20 @@ public class ListenerService extends Thread {
         // working hard together with them
         // This object continues to run and waits for further instructions from remote
         
-        int remote_query = 0;
+        int remote_query = 9;
         
         System.out.println("Now waiting for further instructions from remote");
         
         while (!interrupted) {
             try {
+                remote_query = 9;
                 try {
                     sleep(500); // Sleep 0.5 seconds
                 } catch (InterruptedException ex) {
                     Logger.getLogger(ListenerService.class.getName()).log(Level.SEVERE, null, ex);
                 }
                remote_query = oIn.readInt();
+               System.out.println("Remote said: " + remote_query);
                if (remote_query == 0) {
                    // Okay, we are done. Close things and exit
                    interrupted = true;
@@ -237,6 +242,7 @@ public class ListenerService extends Thread {
                } else {
                    // Remote has a bad value in its request
                    oOut.writeInt(-1);
+                   oOut.flush();
                    System.out.println("Remote had a bad request: " + remote_query);
                }
             } catch (InterruptedIOException e) {
